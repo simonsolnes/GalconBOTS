@@ -5,11 +5,7 @@ from math import sqrt
 import datetime
 from dataclasses import dataclass
 from operator import attrgetter
-
-'''
-protag is the identifier for oneself
-enemy and neutral are pretty self explanatory
-'''
+import functools
 
 class param:
     distance = 1
@@ -20,7 +16,6 @@ class param:
     aggression_prod = 2
     aggression_ships = 1
     threshold = 200
-
 
 def bot(galaxy):
 
@@ -55,16 +50,24 @@ def bot(galaxy):
             planet.score -= param.protag * abs(planet.score)
 
     target_candidate = other_planets.find_max('score')
-    
-    aggression = 100 + param.aggression_prod * (enemy.prod - protag.prod) + param.aggression_ships * (protag.ships - enemy.ships)
-    if (protag.prod - enemy.prod) + 4 * (protag.ships - enemy.ships) > 1000:
-        aggression = 10000
 
-    if target_candidate.score * aggression > param.threshold:
+    aggression = product(
+        100 + param.aggression_prod,
+        (enemy.prod - protag.prod) + param.aggression_ships,
+        (protag.ships - enemy.ships)
+    )
+
+    conditions = [
+        (protag.prod - enemy.prod) + 4 * (protag.ships - enemy.ships) > 1000,
+        target_candidate.score * aggression > param.threshold
+    ]
+
+    if any(conditions):
         source.send(70, target_candidate)
 
     print("Took", str((datetime.datetime.now() - start_time).microseconds), "microseconds")
 
+########################################################################################
 
 class PlanetGroup(list):
     @property
@@ -72,7 +75,7 @@ class PlanetGroup(list):
         return sum([p.prod for p in self])
     def find_max(self, attr):
         return max(self, key=attrgetter(attr))
-        
+
 
 class FleetGroup(list):
     @property
@@ -126,8 +129,6 @@ class User():
     @property
     def ships(self):
         return sum([planet.ships for planet in self.planets]) + sum([fleet.ships for fleet in self.fleets])
-        
-
 
     def __repr__(self):
 
@@ -137,7 +138,7 @@ class Planet():
     def __init__(self, n: int, owner: User, ships: int, pos: Position, prod: int, radius: float):
         assert isinstance(pos, Position)
         assert isinstance(owner, User)
-        
+
         self.n = n
         self.owner = owner
         self.ships = ships
@@ -158,7 +159,6 @@ class Planet():
         assert isinstance(target, Planet)
         sys.stdout.write("/SEND %d %d %d\n" %(70, self.n, target.n) + "\n")
         sys.stdout.flush()
-        
 
 class Fleet():
     def __init__(self, n: int, xid: int, owner: User, ships: int, pos: Position, source: Planet, target: Planet, radius: int):
@@ -174,6 +174,11 @@ class Fleet():
     def __repr__(self):
         return 'fleet[ships:' + str(self.ships) + ' o:' + self.owner.name + ']'
     pass
+
+########################################################################################
+
+def product(*args):
+    return functools.reduce(lambda a, b: a * b, args)
 
 ########################################################################################
 
@@ -206,7 +211,7 @@ class GameManager():
             if len(line) == 0:
                 continue
             self.parse(g,line)
-    
+
     def create_galaxy(self, g):
         users = {}
 
@@ -223,7 +228,7 @@ class GameManager():
                fleet_bucket.append(o)
             else:
                 raise Exception("uknown type of entity: " + o.type)
-        
+
         planets = {}
 
         for o in planet_bucket:
@@ -232,7 +237,7 @@ class GameManager():
             new_planet = Planet(n = o.n, owner = owner, ships = int(o.ships), pos = Position(o.x, o.y), prod = o.production, radius = o.radius)
             planets[o.n] = new_planet
             owner.planets.append(new_planet)
-        
+
         fleets = FleetGroup()
         for o in fleet_bucket:
             owner = users[o.owner]
